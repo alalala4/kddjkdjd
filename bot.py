@@ -41,10 +41,10 @@ MODELS = {
         "name": "Llama 3.3 70B",
         "description": "Мощная, отлично пишет на русском",
     },
-    "qwen": {
-        "id": "qwen-qwq-32b",
-        "name": "Qwen QWQ 32B",
-        "description": "Думающая модель, хороша для анализа",
+    "gemma": {
+        "id": "gemma2-9b-it",
+        "name": "Gemma 2 9B",
+        "description": "Быстрая модель от Google, хороша для коротких задач",
     },
 }
 
