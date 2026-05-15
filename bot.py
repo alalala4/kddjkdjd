@@ -33,7 +33,7 @@ ALLOWED_USER_ID = int(os.getenv("ALLOWED_USER_ID", "0"))
 MODEL_ID = "compound-beta"
 MODEL_NAME = "Compound (с интернетом)"
 
-MAX_HISTORY = 20  # Храним 20 сообщений, но обрезаем если слишком длинные
+MAX_HISTORY = 6  # Compound Beta быстро переполняется - храним только 6 последних сообщений
 
 # ============================================================
 # Инициализация
@@ -128,7 +128,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = get_user_data(user_id)
     user_message = update.message.text
 
-    data["history"].append({"role": "user", "content": user_message})
+    data["history"].append({"role": "user", "content": user_message[:1000]})  # Обрезаем длинные сообщения
     if len(data["history"]) > MAX_HISTORY:
         data["history"] = data["history"][-MAX_HISTORY:]
 
@@ -150,7 +150,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         reply = response.choices[0].message.content
-        data["history"].append({"role": "assistant", "content": reply})
+        # Обрезаем длинные ответы в истории (чтобы не переполнить контекст)
+        saved_reply = reply[:2000] if len(reply) > 2000 else reply
+        data["history"].append({"role": "assistant", "content": saved_reply})
 
         try:
             await update.message.reply_text(reply, parse_mode="Markdown")
