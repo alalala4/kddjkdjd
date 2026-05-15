@@ -41,9 +41,9 @@ MODELS = {
         "name": "Llama 3.3 70B",
         "description": "Мощная, отлично пишет на русском",
     },
-    "deepseek": {
-        "id": "deepseek-r1-distill-llama-70b",
-        "name": "DeepSeek R1 70B",
+    "qwen": {
+        "id": "qwen-qwq-32b",
+        "name": "Qwen QWQ 32B",
         "description": "Думающая модель, хороша для анализа",
     },
 }
