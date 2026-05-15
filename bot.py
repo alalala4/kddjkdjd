@@ -31,15 +31,20 @@ ALLOWED_USER_ID = int(os.getenv("ALLOWED_USER_ID", "0"))
 
 # Модели Groq (все бесплатные)
 MODELS = {
+    "compound": {
+        "id": "compound-beta",
+        "name": "Compound (с интернетом)",
+        "description": "Ищет в интернете перед ответом - актуальная информация на 2026",
+    },
     "llama4": {
         "id": "meta-llama/llama-4-scout-17b-16e-instruct",
         "name": "Llama 4 Scout",
-        "description": "Новейшая модель Meta, уровень GPT-4o",
+        "description": "Быстрая, без интернета, база знаний до 2024",
     },
     "llama3": {
         "id": "llama-3.3-70b-versatile",
         "name": "Llama 3.3 70B",
-        "description": "Мощная, отлично пишет на русском",
+        "description": "Мощная для текстов, без интернета",
     },
 }
 
@@ -63,7 +68,7 @@ user_data: Dict[int, dict] = {}
 def get_user_data(user_id: int) -> dict:
     if user_id not in user_data:
         user_data[user_id] = {
-            "model": "llama4",
+            "model": "compound",
             "history": [],
         }
     return user_data[user_id]
