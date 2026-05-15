@@ -41,11 +41,6 @@ MODELS = {
         "name": "Llama 3.3 70B",
         "description": "Мощная, отлично пишет на русском",
     },
-    "gemma": {
-        "id": "gemma2-9b-it",
-        "name": "Gemma 2 9B",
-        "description": "Быстрая модель от Google, хороша для коротких задач",
-    },
 }
 
 MAX_HISTORY = 20
