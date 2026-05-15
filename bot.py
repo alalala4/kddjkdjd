@@ -29,26 +29,11 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 ALLOWED_USER_ID = int(os.getenv("ALLOWED_USER_ID", "0"))
 
-# Модели Groq (все бесплатные)
-MODELS = {
-    "compound": {
-        "id": "compound-beta",
-        "name": "Compound (с интернетом)",
-        "description": "Ищет в интернете перед ответом - актуальная информация на 2026",
-    },
-    "llama4": {
-        "id": "meta-llama/llama-4-scout-17b-16e-instruct",
-        "name": "Llama 4 Scout",
-        "description": "Быстрая, без интернета, база знаний до 2024",
-    },
-    "llama3": {
-        "id": "llama-3.3-70b-versatile",
-        "name": "Llama 3.3 70B",
-        "description": "Мощная для текстов, без интернета",
-    },
-}
+# Модель
+MODEL_ID = "compound-beta"
+MODEL_NAME = "Compound (с интернетом)"
 
-MAX_HISTORY = 10  # Compound Beta имеет меньший лимит контекста
+MAX_HISTORY = 20  # Храним 20 сообщений, но обрезаем если слишком длинные
 
 # ============================================================
 # Инициализация
@@ -68,7 +53,6 @@ user_data: Dict[int, dict] = {}
 def get_user_data(user_id: int) -> dict:
     if user_id not in user_data:
         user_data[user_id] = {
-            "model": "compound",
             "history": [],
         }
     return user_data[user_id]
@@ -84,12 +68,10 @@ def is_allowed(user_id: int) -> bool:
 # Клавиатуры
 # ============================================================
 
-def main_keyboard(current_model: str = "llama4") -> InlineKeyboardMarkup:
-    keyboard = []
-    for key, model_info in MODELS.items():
-        label = f"✅ {model_info['name']}" if key == current_model else model_info['name']
-        keyboard.append([InlineKeyboardButton(label, callback_data=f"model_{key}")])
-    keyboard.append([InlineKeyboardButton("🗑 Очистить историю", callback_data="clear")])
+def main_keyboard() -> InlineKeyboardMarkup:
+    keyboard = [
+        [InlineKeyboardButton("🗑 Очистить историю", callback_data="clear")],
+    ]
     return InlineKeyboardMarkup(keyboard)
 
 
@@ -102,15 +84,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Доступ запрещён.")
         return
 
-    data = get_user_data(update.effective_user.id)
-    model_name = MODELS[data["model"]]["name"]
-
     await update.message.reply_text(
-        f"Привет! Я бот с ИИ (100% бесплатный).\n\n"
-        f"Текущая модель: *{model_name}*\n\n"
-        "Просто пишите сообщение - отвечу.\n"
-        "Кнопки ниже для переключения модели:",
-        reply_markup=main_keyboard(data["model"]),
+        "Привет! Я бот с ИИ + поиском в интернете.\n\n"
+        "Просто пишите сообщение - отвечу с учётом актуальной информации из сети.\n\n"
+        "Кнопка ниже для сброса диалога:",
+        reply_markup=main_keyboard(),
         parse_mode="Markdown",
     )
 
@@ -129,26 +107,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = get_user_data(query.from_user.id)
     action = query.data
 
-    if action.startswith("model_"):
-        model_key = action.replace("model_", "")
-        if model_key in MODELS:
-            data["model"] = model_key
-            data["history"] = []
-            model_info = MODELS[model_key]
-            await query.edit_message_text(
-                f"Переключил на *{model_info['name']}*\n"
-                f"_{model_info['description']}_\n\n"
-                "История очищена. Пишите сообщение:",
-                reply_markup=main_keyboard(model_key),
-                parse_mode="Markdown",
-            )
-
-    elif action == "clear":
+    if action == "clear":
         data["history"] = []
-        model_name = MODELS[data["model"]]["name"]
         await query.edit_message_text(
-            f"История очищена. Модель: *{model_name}*\n\nПишите сообщение:",
-            reply_markup=main_keyboard(data["model"]),
+            "История очищена. Пишите сообщение:",
+            reply_markup=main_keyboard(),
             parse_mode="Markdown",
         )
 
@@ -172,8 +135,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.chat.send_action("typing")
 
     try:
-        model_id = MODELS[data["model"]]["id"]
-
         messages = [
             {
                 "role": "system",
@@ -182,7 +143,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ] + data["history"]
 
         response = groq_client.chat.completions.create(
-            model=model_id,
+            model=MODEL_ID,
             messages=messages,
             max_tokens=4096,
             temperature=0.7,
@@ -198,7 +159,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.error(f"Groq error: {e}")
-        await update.message.reply_text(f"Ошибка: {str(e)[:500]}")
+        # Если ошибка 413 (слишком длинный запрос) - обрезаем историю и пробуем снова
+        if "413" in str(e) or "too_large" in str(e) or "Request Entity Too Large" in str(e):
+            data["history"] = data["history"][-4:]  # Оставляем только 4 последних
+            await update.message.reply_text("История была слишком длинной - обрезал. Попробуйте ещё раз.")
+        else:
+            await update.message.reply_text(f"Ошибка: {str(e)[:500]}")
 
 
 # ============================================================
