@@ -1,9 +1,6 @@
 """
-РЕЙТ AI Bot - Telegram бот с Groq (Llama 4)
-100% бесплатный, работает из России, без карты.
-
-Groq - сверхбыстрый ИИ (500+ токенов/сек), модели уровня GPT-4o.
-Регистрация: https://console.groq.com (email или Google, без карты).
+РЕЙТ AI Bot - Telegram бот с OpenAI (GPT-4o + DALL-E 3)
+Текстовый чат с интернетом + генерация изображений.
 """
 
 import os
@@ -19,21 +16,21 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
-from groq import Groq
+from openai import AsyncOpenAI
 
 # ============================================================
 # НАСТРОЙКИ
 # ============================================================
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 ALLOWED_USER_ID = int(os.getenv("ALLOWED_USER_ID", "0"))
 
-# Модель
-MODEL_ID = "compound-beta"
-MODEL_NAME = "Compound (с интернетом)"
+# Модели
+CHAT_MODEL = "gpt-4o"
+IMAGE_MODEL = "dall-e-3"
 
-MAX_HISTORY = 6  # Compound Beta быстро переполняется - храним только 6 последних сообщений
+MAX_HISTORY = 10
 
 # ============================================================
 # Инициализация
@@ -45,7 +42,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-groq_client = Groq(api_key=GROQ_API_KEY)
+openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 user_data: Dict[int, dict] = {}
 
@@ -70,6 +67,7 @@ def is_allowed(user_id: int) -> bool:
 
 def main_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
+        [InlineKeyboardButton("🖼 Сгенерировать картинку", callback_data="img_help")],
         [InlineKeyboardButton("🗑 Очистить историю", callback_data="clear")],
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -85,11 +83,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text(
-        "Привет! Я бот с ИИ + поиском в интернете.\n\n"
-        "Просто пишите сообщение - отвечу с учётом актуальной информации из сети.\n\n"
-        "Кнопка ниже для сброса диалога:",
+        "Привет! Я бот с GPT-4o + DALL-E 3.\n\n"
+        "Что умею:\n"
+        "- Отвечать на вопросы (уровень ChatGPT)\n"
+        "- Искать актуальную информацию\n"
+        "- Генерировать картинки по описанию\n\n"
+        "Как пользоваться:\n"
+        "- Просто пишите текст - отвечу\n"
+        "- /img описание - сгенерирую картинку\n\n"
+        "Кнопки ниже:",
         reply_markup=main_keyboard(),
-        parse_mode="Markdown",
     )
 
 
@@ -112,12 +115,65 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             "История очищена. Пишите сообщение:",
             reply_markup=main_keyboard(),
-            parse_mode="Markdown",
+        )
+
+    elif action == "img_help":
+        await query.edit_message_text(
+            "Генерация картинок (DALL-E 3)\n\n"
+            "Отправьте команду:\n"
+            "/img ваше описание\n\n"
+            "Примеры:\n"
+            "- /img обложка для статьи про стиральные машины, мужчина держит ТЭН, рядом Bosch и Candy\n"
+            "- /img красивый закат над морем в стиле масляной живописи\n"
+            "- /img YouTube превью, шокированный мужчина, рядом два холодильника с ценниками",
+            reply_markup=main_keyboard(),
         )
 
 
 # ============================================================
-# Обработка сообщений
+# Генерация изображений (DALL-E 3)
+# ============================================================
+
+async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_allowed(update.effective_user.id):
+        return
+
+    prompt = " ".join(context.args) if context.args else None
+    if not prompt:
+        await update.message.reply_text(
+            "Укажите описание после команды:\n"
+            "/img обложка для статьи про стиральные машины"
+        )
+        return
+
+    msg = await update.message.reply_text("Генерирую изображение... (15-30 сек)")
+
+    try:
+        response = await openai_client.images.generate(
+            model=IMAGE_MODEL,
+            prompt=prompt,
+            size="1792x1024",
+            quality="hd",
+            n=1,
+        )
+
+        image_url = response.data[0].url
+        revised_prompt = response.data[0].revised_prompt or ""
+
+        caption = f"Промпт: {prompt[:200]}"
+        if revised_prompt:
+            caption += f"\n\nDALL-E: {revised_prompt[:300]}"
+
+        await msg.delete()
+        await update.message.reply_photo(photo=image_url, caption=caption[:1024])
+
+    except Exception as e:
+        logger.error(f"DALL-E error: {e}")
+        await msg.edit_text(f"Ошибка генерации: {str(e)[:500]}")
+
+
+# ============================================================
+# Обработка текстовых сообщений
 # ============================================================
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -128,7 +184,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = get_user_data(user_id)
     user_message = update.message.text
 
-    data["history"].append({"role": "user", "content": user_message[:1000]})  # Обрезаем длинные сообщения
+    data["history"].append({"role": "user", "content": user_message})
     if len(data["history"]) > MAX_HISTORY:
         data["history"] = data["history"][-MAX_HISTORY:]
 
@@ -138,21 +194,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         messages = [
             {
                 "role": "system",
-                "content": "Ты полезный ассистент. Отвечай на русском, если пользователь пишет на русском. Будь кратким и по делу.",
+                "content": "Ты полезный ассистент. Отвечай на русском, если пользователь пишет на русском. Будь кратким и по делу. Если нужна актуальная информация - используй свои знания до апреля 2025.",
             }
         ] + data["history"]
 
-        response = groq_client.chat.completions.create(
-            model=MODEL_ID,
+        response = await openai_client.chat.completions.create(
+            model=CHAT_MODEL,
             messages=messages,
             max_tokens=4096,
             temperature=0.7,
         )
 
         reply = response.choices[0].message.content
-        # Обрезаем длинные ответы в истории (чтобы не переполнить контекст)
-        saved_reply = reply[:2000] if len(reply) > 2000 else reply
-        data["history"].append({"role": "assistant", "content": saved_reply})
+        data["history"].append({"role": "assistant", "content": reply[:2000]})
 
         try:
             await update.message.reply_text(reply, parse_mode="Markdown")
@@ -160,11 +214,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(reply)
 
     except Exception as e:
-        logger.error(f"Groq error: {e}")
-        # Если ошибка 413 (слишком длинный запрос) - обрезаем историю и пробуем снова
-        if "413" in str(e) or "too_large" in str(e) or "Request Entity Too Large" in str(e):
-            data["history"] = data["history"][-4:]  # Оставляем только 4 последних
-            await update.message.reply_text("История была слишком длинной - обрезал. Попробуйте ещё раз.")
+        logger.error(f"OpenAI error: {e}")
+        if "413" in str(e) or "too_large" in str(e) or "maximum context" in str(e):
+            data["history"] = data["history"][-4:]
+            await update.message.reply_text("История переполнилась - обрезал. Попробуйте ещё раз.")
         else:
             await update.message.reply_text(f"Ошибка: {str(e)[:500]}")
 
@@ -178,18 +231,18 @@ def main():
         print("ОШИБКА: Не задан TELEGRAM_TOKEN!")
         return
 
-    if not GROQ_API_KEY:
-        print("ОШИБКА: Не задан GROQ_API_KEY!")
-        print("Получите бесплатно: https://console.groq.com")
+    if not OPENAI_API_KEY:
+        print("ОШИБКА: Не задан OPENAI_API_KEY!")
         return
 
     app = Application.builder().token(TELEGRAM_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("img", generate_image))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    logger.info("Бот запущен! Ожидаю сообщения...")
+    logger.info("Бот запущен! GPT-4o + DALL-E 3")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
