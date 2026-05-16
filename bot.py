@@ -1,6 +1,6 @@
 """
-РЕЙТ AI Bot - Telegram бот с OpenAI (GPT-4o + DALL-E 3)
-Текстовый чат с интернетом + генерация изображений.
+РЕЙТ AI Bot - Telegram бот с OpenAI (GPT-4o + Web Search + DALL-E 3)
+Текстовый чат С ПОИСКОМ В ИНТЕРНЕТЕ + генерация изображений.
 """
 
 import os
@@ -26,7 +26,7 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 ALLOWED_USER_ID = int(os.getenv("ALLOWED_USER_ID", "0"))
 
-# Модели (gpt-4o-mini дешевле и доступна всем с балансом $5+)
+# Модели
 CHAT_MODEL = "gpt-4o-mini"
 IMAGE_MODEL = "dall-e-3"
 
@@ -83,13 +83,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text(
-        "Привет! Я бот с GPT-4o + DALL-E 3.\n\n"
+        "Привет! Я бот с GPT-4o + поиск в интернете + DALL-E 3.\n\n"
         "Что умею:\n"
-        "- Отвечать на вопросы (уровень ChatGPT)\n"
-        "- Искать актуальную информацию\n"
+        "- Отвечать на вопросы с актуальной инфой из интернета (2026!)\n"
         "- Генерировать картинки по описанию\n\n"
         "Как пользоваться:\n"
-        "- Просто пишите текст - отвечу\n"
+        "- Просто пишите текст - отвечу (с поиском в сети)\n"
         "- /img описание - сгенерирую картинку\n\n"
         "Кнопки ниже:",
         reply_markup=main_keyboard(),
@@ -124,7 +123,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/img ваше описание\n\n"
             "Примеры:\n"
             "- /img обложка для статьи про стиральные машины, мужчина держит ТЭН, рядом Bosch и Candy\n"
-            "- /img красивый закат над морем в стиле масляной живописи\n"
             "- /img YouTube превью, шокированный мужчина, рядом два холодильника с ценниками",
             reply_markup=main_keyboard(),
         )
@@ -173,7 +171,7 @@ async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ============================================================
-# Обработка текстовых сообщений
+# Обработка текстовых сообщений (с поиском в интернете!)
 # ============================================================
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -191,21 +189,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.chat.send_action("typing")
 
     try:
-        messages = [
-            {
-                "role": "system",
-                "content": "Ты полезный ассистент. Отвечай на русском, если пользователь пишет на русском. Будь кратким и по делу. Ты GPT-4o-mini с данными до октября 2024. Никогда не говори что ты GPT-3.5 или что твои данные до 2023.",
-            }
-        ] + data["history"]
-
-        response = await openai_client.chat.completions.create(
+        # Используем responses API с web_search tool для актуальной информации
+        response = await openai_client.responses.create(
             model=CHAT_MODEL,
-            messages=messages,
-            max_tokens=4096,
-            temperature=0.7,
+            instructions="Ты полезный ассистент. Отвечай на русском, если пользователь пишет на русском. Будь кратким и по делу. ВСЕГДА ищи в интернете актуальную информацию перед ответом.",
+            input=user_message,
+            tools=[{"type": "web_search_preview"}],
         )
 
-        reply = response.choices[0].message.content
+        reply = response.output_text
         data["history"].append({"role": "assistant", "content": reply[:2000]})
 
         try:
@@ -215,11 +207,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.error(f"OpenAI error: {e}")
-        if "413" in str(e) or "too_large" in str(e) or "maximum context" in str(e):
-            data["history"] = data["history"][-4:]
-            await update.message.reply_text("История переполнилась - обрезал. Попробуйте ещё раз.")
-        else:
-            await update.message.reply_text(f"Ошибка: {str(e)[:500]}")
+        # Если web_search не поддерживается - откатимся на обычный chat
+        try:
+            messages = [
+                {"role": "system", "content": "Ты полезный ассистент. Отвечай на русском. Будь кратким."}
+            ] + data["history"]
+
+            response = await openai_client.chat.completions.create(
+                model=CHAT_MODEL,
+                messages=messages,
+                max_tokens=4096,
+                temperature=0.7,
+            )
+
+            reply = response.choices[0].message.content
+            data["history"].append({"role": "assistant", "content": reply[:2000]})
+
+            try:
+                await update.message.reply_text(reply, parse_mode="Markdown")
+            except Exception:
+                await update.message.reply_text(reply)
+
+        except Exception as e2:
+            await update.message.reply_text(f"Ошибка: {str(e2)[:500]}")
 
 
 # ============================================================
@@ -242,7 +252,7 @@ def main():
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    logger.info("Бот запущен! GPT-4o + DALL-E 3")
+    logger.info("Бот запущен! GPT-4o + Web Search + DALL-E 3")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
