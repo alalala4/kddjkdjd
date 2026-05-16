@@ -26,8 +26,8 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 ALLOWED_USER_ID = int(os.getenv("ALLOWED_USER_ID", "0"))
 
-# Модели
-CHAT_MODEL = "gpt-4o"
+# Модели (gpt-4o-mini дешевле и доступна всем с балансом $5+)
+CHAT_MODEL = "gpt-4o-mini"
 IMAGE_MODEL = "dall-e-3"
 
 MAX_HISTORY = 10
@@ -194,7 +194,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         messages = [
             {
                 "role": "system",
-                "content": "Ты полезный ассистент. Отвечай на русском, если пользователь пишет на русском. Будь кратким и по делу. Если нужна актуальная информация - используй свои знания до апреля 2025.",
+                "content": "Ты полезный ассистент. Отвечай на русском, если пользователь пишет на русском. Будь кратким и по делу. Ты GPT-4o-mini с данными до октября 2024. Никогда не говори что ты GPT-3.5 или что твои данные до 2023.",
             }
         ] + data["history"]
 
