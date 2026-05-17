@@ -28,7 +28,7 @@ ALLOWED_USER_ID = int(os.getenv("ALLOWED_USER_ID", "0"))
 
 # Модели
 CHAT_MODEL = "gpt-4o-mini"
-IMAGE_MODEL = "dall-e-3"
+IMAGE_MODEL = "gpt-image-1"
 
 MAX_HISTORY = 10
 
@@ -150,17 +150,13 @@ async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = await openai_client.images.generate(
             model=IMAGE_MODEL,
             prompt=prompt,
-            size="1792x1024",
-            quality="hd",
+            size="1024x1024",
             n=1,
         )
 
         image_url = response.data[0].url
-        revised_prompt = response.data[0].revised_prompt or ""
 
         caption = f"Промпт: {prompt[:200]}"
-        if revised_prompt:
-            caption += f"\n\nDALL-E: {revised_prompt[:300]}"
 
         await msg.delete()
         await update.message.reply_photo(photo=image_url, caption=caption[:1024])
