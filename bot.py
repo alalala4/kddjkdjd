@@ -147,6 +147,9 @@ async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("Генерирую изображение... (15-30 сек)")
 
     try:
+        import base64
+        import io
+
         response = await openai_client.images.generate(
             model=IMAGE_MODEL,
             prompt=prompt,
@@ -154,12 +157,22 @@ async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
             n=1,
         )
 
-        image_url = response.data[0].url
+        # gpt-image-1 возвращает base64 по умолчанию
+        image_data = response.data[0]
 
-        caption = f"Промпт: {prompt[:200]}"
-
-        await msg.delete()
-        await update.message.reply_photo(photo=image_url, caption=caption[:1024])
+        if hasattr(image_data, 'b64_json') and image_data.b64_json:
+            # Декодируем base64 в байты
+            img_bytes = base64.b64decode(image_data.b64_json)
+            caption = f"Промпт: {prompt[:200]}"
+            await msg.delete()
+            await update.message.reply_photo(photo=io.BytesIO(img_bytes), caption=caption[:1024])
+        elif hasattr(image_data, 'url') and image_data.url:
+            # Если вернулся URL
+            caption = f"Промпт: {prompt[:200]}"
+            await msg.delete()
+            await update.message.reply_photo(photo=image_data.url, caption=caption[:1024])
+        else:
+            await msg.edit_text("Изображение сгенерировано, но не удалось его получить. Попробуйте ещё раз.")
 
     except Exception as e:
         logger.error(f"DALL-E error: {e}")
