@@ -5,7 +5,7 @@
 
 import os
 import logging
-from typing import Dict, List
+from typing import Dict
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -24,11 +24,14 @@ from openai import AsyncOpenAI
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "")
 ALLOWED_USER_ID = int(os.getenv("ALLOWED_USER_ID", "0"))
 
 # Модели
-CHAT_MODEL = "gpt-4o-mini"
-IMAGE_MODEL = "gpt-image-1"
+CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-4o-mini")
+IMAGE_MODEL = os.getenv("IMAGE_MODEL", "gpt-image-1")
+ENABLE_WEB_SEARCH = os.getenv("ENABLE_WEB_SEARCH", "1") == "1"
+ENABLE_IMAGE_GENERATION = os.getenv("ENABLE_IMAGE_GENERATION", "1") == "1"
 
 MAX_HISTORY = 10
 
@@ -42,7 +45,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+openai_client = AsyncOpenAI(
+    api_key=OPENAI_API_KEY,
+    base_url=OPENAI_BASE_URL or None,
+)
 
 user_data: Dict[int, dict] = {}
 
@@ -83,10 +89,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text(
-        "Привет! Я бот с GPT-4o + поиск в интернете + DALL-E 3.\n\n"
+        "Привет! Я AI-бот для Telegram.\n\n"
         "Что умею:\n"
-        "- Отвечать на вопросы с актуальной инфой из интернета (2026!)\n"
-        "- Генерировать картинки по описанию\n\n"
+        "- Отвечать на вопросы\n"
+        "- Искать в интернете, если это поддерживает выбранный API\n"
+        "- Генерировать картинки, если это поддерживает выбранный API\n\n"
         "Как пользоваться:\n"
         "- Просто пишите текст - отвечу (с поиском в сети)\n"
         "- /img описание - сгенерирую картинку\n\n"
@@ -118,7 +125,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif action == "img_help":
         await query.edit_message_text(
-            "Генерация картинок (DALL-E 3)\n\n"
+            "Генерация картинок\n\n"
             "Отправьте команду:\n"
             "/img ваше описание\n\n"
             "Примеры:\n"
@@ -147,6 +154,10 @@ async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("Генерирую изображение... (15-30 сек)")
 
     try:
+        if not ENABLE_IMAGE_GENERATION:
+            await msg.edit_text("Генерация изображений отключена в настройках бота.")
+            return
+
         import base64
         import io
 
@@ -198,15 +209,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.chat.send_action("typing")
 
     try:
-        # Используем responses API с web_search tool для актуальной информации
-        response = await openai_client.responses.create(
-            model=CHAT_MODEL,
-            instructions="Ты полезный ассистент. Отвечай на русском, если пользователь пишет на русском. Будь кратким и по делу. ВСЕГДА ищи в интернете актуальную информацию перед ответом.",
-            input=user_message,
-            tools=[{"type": "web_search_preview"}],
-        )
+        if ENABLE_WEB_SEARCH and not OPENAI_BASE_URL:
+            response = await openai_client.responses.create(
+                model=CHAT_MODEL,
+                instructions="Ты полезный ассистент. Отвечай на русском, если пользователь пишет на русском. Будь кратким и по делу. ВСЕГДА ищи в интернете актуальную информацию перед ответом.",
+                input=user_message,
+                tools=[{"type": "web_search_preview"}],
+            )
 
-        reply = response.output_text
+            reply = response.output_text
+        else:
+            messages = [
+                {"role": "system", "content": "Ты полезный ассистент. Отвечай на русском. Будь кратким."}
+            ] + data["history"]
+
+            response = await openai_client.chat.completions.create(
+                model=CHAT_MODEL,
+                messages=messages,
+                max_tokens=4096,
+                temperature=0.7,
+            )
+
+            reply = response.choices[0].message.content
+
         data["history"].append({"role": "assistant", "content": reply[:2000]})
 
         try:
@@ -261,7 +286,7 @@ def main():
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    logger.info("Бот запущен! GPT-4o + Web Search + DALL-E 3")
+    logger.info("Бот запущен. Model: %s", CHAT_MODEL)
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
