@@ -106,11 +106,17 @@
 6. Railway создаст сервис. Перейдите в **Settings** (настройки) сервиса:
    - Root Directory: оставьте пустым, файлы бота лежат в корне ветки
    - Start Command: `python bot.py`
-7. Перейдите во вкладку **Variables** и добавьте 3 переменные:
+7. Перейдите во вкладку **Variables** и добавьте переменные:
    ```
    TELEGRAM_TOKEN = ваш_токен_от_BotFather
    OPENAI_API_KEY = ваш_API_ключ
    ALLOWED_USER_ID = ваш_telegram_id
+
+   # если ключ от OpenAI-совместимого провайдера:
+   OPENAI_BASE_URL = https://api.example.com/v1
+   CHAT_MODEL = название_модели_у_провайдера
+   ENABLE_WEB_SEARCH = 0
+   ENABLE_IMAGE_GENERATION = 0
    ```
 8. Нажмите **Deploy** - Railway установит зависимости и запустит бота
 9. Подождите 1-2 минуты, откройте Telegram и напишите боту `/start`
@@ -193,7 +199,7 @@
 
 ### Railway показывает ошибку при деплое
 - Убедитесь, что Root Directory пустой
-- Проверьте, что все 3 переменные заданы в Variables
+- Проверьте, что все обязательные переменные заданы в Variables
 - Посмотрите логи - там будет написано, что не так
 
 ---
