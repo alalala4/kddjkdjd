@@ -19,8 +19,8 @@
    OPENAI_API_KEY=ваш_ключ
    ALLOWED_USER_ID=ваш_id
    # если ключ от OpenAI-совместимого провайдера:
-   OPENAI_BASE_URL=https://api.example.com/v1
-   CHAT_MODEL=название_модели_у_провайдера
+   OPENAI_BASE_URL=https://api.freemodel.dev/v1
+   CHAT_MODEL=gpt-5.4-mini
    ENABLE_WEB_SEARCH=0
    ENABLE_IMAGE_GENERATION=0
    ```

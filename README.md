@@ -46,6 +46,7 @@
 Для обычного OpenAI: https://platform.openai.com/api-keys
 
 Для OpenAI-совместимого провайдера сохраните также `base_url` из его инструкции.
+Для freemodel.dev используйте OpenAI format: `OPENAI_BASE_URL=https://api.freemodel.dev/v1`.
 
 ---
 
@@ -76,8 +77,8 @@
    TELEGRAM_TOKEN=ваш_токен_от_BotFather
    OPENAI_API_KEY=ваш_API_ключ
    # если провайдер не OpenAI:
-   OPENAI_BASE_URL=https://api.example.com/v1
-   CHAT_MODEL=название_модели_у_провайдера
+   OPENAI_BASE_URL=https://api.freemodel.dev/v1
+   CHAT_MODEL=gpt-5.4-mini
    ENABLE_WEB_SEARCH=0
    ENABLE_IMAGE_GENERATION=0
    ALLOWED_USER_ID=ваш_telegram_id
@@ -113,8 +114,8 @@
    ALLOWED_USER_ID = ваш_telegram_id
 
    # если ключ от OpenAI-совместимого провайдера:
-   OPENAI_BASE_URL = https://api.example.com/v1
-   CHAT_MODEL = название_модели_у_провайдера
+   OPENAI_BASE_URL = https://api.freemodel.dev/v1
+   CHAT_MODEL = gpt-5.4-mini
    ENABLE_WEB_SEARCH = 0
    ENABLE_IMAGE_GENERATION = 0
    ```
